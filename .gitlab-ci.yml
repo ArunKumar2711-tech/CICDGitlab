@@ -1,0 +1,74 @@
+image: openjdk:17-jdk-slim
+
+stages:
+  - test
+
+variables:
+  FIREFOX_VERSION: "130.0.1"
+  GECKO_DRIVER_VERSION: "v0.33.0"
+  PROFILE_DIR: "/root/.mozilla"
+  FIREFOX_LOG_LEVEL: "trace"
+  GECKO_DRIVER_LOG: "trace"
+
+before_script:
+  # Update package manager and install required dependencies
+  - apt-get update
+  
+  # Install dependencies for Firefox, Geckodriver, and Maven
+  - apt-get install -y wget curl unzip gnupg file libgtk-3-0 dbus-x11 libnss3 libgconf-2-4 libxss1 libasound2 fonts-liberation bzip2
+  
+  # Install libX11-xcb1 to fix XPCOM error
+  - apt-get install -y libx11-xcb1
+  
+  # Download Firefox 130.0.1 manually
+  - wget https://ftp.mozilla.org/pub/firefox/releases/${FIREFOX_VERSION}/linux-x86_64/en-US/firefox-${FIREFOX_VERSION}.tar.bz2
+  
+  # Extract and move Firefox to /opt directory
+  - tar -xjf firefox-${FIREFOX_VERSION}.tar.bz2
+  - mv firefox /opt/firefox-${FIREFOX_VERSION}
+  
+  # Create a symbolic link to use 'firefox' command globally
+  - ln -s /opt/firefox-${FIREFOX_VERSION}/firefox /usr/local/bin/firefox
+  
+  # Check and verify installed Firefox version
+  - firefox --version  # This should output "Mozilla Firefox 130.0.1"
+
+  # Download and install Geckodriver
+  - wget https://github.com/mozilla/geckodriver/releases/download/${GECKO_DRIVER_VERSION}/geckodriver-${GECKO_DRIVER_VERSION}-linux64.tar.gz -O geckodriver-linux64.tar.gz
+  - tar -xzf geckodriver-linux64.tar.gz
+  - mv geckodriver /usr/local/bin/geckodriver
+  - chmod +x /usr/local/bin/geckodriver
+  
+  # Install Maven
+  - apt-get install -y maven
+  
+  # Set up the Firefox profile
+  - mkdir -p ${PROFILE_DIR}
+  - tar -xzf 37i7d57d.Automate.tar.gz -C ${PROFILE_DIR}
+  
+  # Remove any existing lock files
+  - rm -f ${PROFILE_DIR}/37i7d57d.Automate/*.lock
+  
+  # Set appropriate permissions
+  - chmod -R 755 ${PROFILE_DIR}
+  
+  # Install XVFB for headless display
+  - apt-get install -y xvfb
+  
+  # Start XVFB in the background
+  - Xvfb :99 -ac &
+  
+  # Allow some time for XVFB to initialize
+  - sleep 5
+  
+  # Set the display to XVFB (headless)
+  - export DISPLAY=:99
+
+test:
+  stage: test
+  script:
+    # Check Geckodriver version
+    - geckodriver --version
+    
+    # Run tests using Maven and the specified WebDriver
+    - mvn test -Dwebdriver.gecko.driver=/usr/local/bin/geckodriver -X
